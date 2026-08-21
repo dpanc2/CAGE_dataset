@@ -1,0 +1,4 @@
+donor_id	run_accession	chamber	fastq
+M60_healthy_inferred	SRR16506297	left_atrium	SRR16506297.fastq.gz
+M60_healthy_inferred	SRR16506298	left_ventricle	SRR16506298.fastq.gz
+
