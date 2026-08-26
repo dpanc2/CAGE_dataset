@@ -8,5 +8,5 @@ dependencies:
   - samtools=1.10
   - bcftools=1.10.2
   - pysam=0.20.0
+  - openpyxl
   - curl
-
