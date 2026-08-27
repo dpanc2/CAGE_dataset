@@ -89,9 +89,9 @@ cut -f1 "$SAMPLES" | tail -n +2 | sort -u | while read -r donor; do
   awk -F '\t' -v d="$donor" 'NR>1 && $1==d {print $2}' "$SAMPLES" | while read -r run; do
     python3 "$REPO_DIR/pipeline/count_alleles.py" \
       --bam "$RESULTS/bam/$run.filtered.bam" --vcf "$het" \
-      --output "$RESULTS/counts/$run.allele_counts.tsv"
+      --format mixalime --sample-id "$run" \
+      --output "$RESULTS/counts/$run.mapped"
   done
 done
 
 echo "Pilot complete: $RESULTS"
-

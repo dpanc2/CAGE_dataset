@@ -121,7 +121,7 @@ fi
 if run_stage count; then
   awk -F '\t' 'NR>1 {print $1 "\t" $3}' "$SAMPLES" \
   | while IFS=$'\t' read -r donor run; do
-    out="$RESULTS/counts/$run.allele_counts.tsv"
+    out="$RESULTS/counts/$run.mapped"
     if [[ -s "$out" ]]; then
       echo "Allele counts already complete: $run"
       continue
@@ -129,6 +129,7 @@ if run_stage count; then
     python3 "$REPO_DIR/pipeline/count_alleles.py" \
       --bam "$RESULTS/bam/$run.filtered.bam" \
       --vcf "$RESULTS/variants/$donor.heterozygous.vcf.gz" \
+      --format mixalime --sample-id "$run" \
       --output "$out.part"
     mv "$out.part" "$out"
   done
