@@ -13,7 +13,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bam", required=True)
     ap.add_argument("--snvs", required=True)
-    ap.add_argument("--chrom", default="chr1")
+    ap.add_argument("--chrom", default="all", help="Chromosome name or all")
     ap.add_argument("--output-prefix", required=True)
     ap.add_argument("--window", type=int, default=300)
     ap.add_argument("--seed", type=int, default=42)
@@ -21,18 +21,28 @@ def main():
     rng = random.Random(args.seed)
 
     table = pd.read_csv(args.snvs, sep="\t")
-    table = table[table["chrom"].astype(str).isin([args.chrom, args.chrom.removeprefix("chr")])]
-    snvs = {int(r.pos): (r.ref.upper(), r.alt.upper()) for r in table.itertuples()}
-    allele = {p: ((ref, alt) if rng.random() < .5 else (alt, ref))
-              for p, (ref, alt) in snvs.items()}
+    if args.chrom != "all":
+        table = table[table["chrom"].astype(str).isin([args.chrom, args.chrom.removeprefix("chr")])]
+    table["chrom"] = table["chrom"].astype(str).map(
+        lambda x: x if x.startswith("chr") else "chr" + x
+    )
+    snvs = defaultdict(dict)
+    for r in table.itertuples():
+        snvs[r.chrom][int(r.pos)] = (r.ref.upper(), r.alt.upper())
+    allele = {
+        chrom: {p: ((ref, alt) if rng.random() < .5 else (alt, ref))
+                for p, (ref, alt) in positions.items()}
+        for chrom, positions in snvs.items()
+    }
 
     bam = pysam.AlignmentFile(args.bam, "rb")
     assignments = {}
     evidence = defaultdict(list)
 
     # Assign reads carrying an informative SNV.
-    for pos, (a, b) in allele.items():
-        for read in bam.fetch(args.chrom, pos - 1, pos):
+    for chrom, positions in allele.items():
+      for pos, (a, b) in positions.items():
+        for read in bam.fetch(chrom, pos - 1, pos):
             if read.is_unmapped or read.query_sequence is None:
                 continue
             observed = None
@@ -44,7 +54,7 @@ def main():
                 continue
             key = (read.query_name, read.is_read1, read.is_read2)
             target = "A" if observed == a else "B"
-            evidence[key].append((pos, target))
+            evidence[key].append((chrom, pos, target))
             if key not in assignments:
                 assignments[key] = target
             elif assignments[key] != target:
@@ -54,20 +64,23 @@ def main():
     local = defaultdict(lambda: {"A": 0, "B": 0})
     for key, obs in evidence.items():
         if assignments.get(key) in ("A", "B"):
-            for pos, target in obs:
-                local[pos][target] += 1
+            for chrom, pos, target in obs:
+                local[(chrom, pos)][target] += 1
 
     # Assign every remaining mapped read: local proportion near an SNV, else 50/50.
-    for read in bam.fetch(args.chrom):
+    bam.reset()
+    for read in bam.fetch(until_eof=True):
         if read.is_unmapped:
             continue
         key = (read.query_name, read.is_read1, read.is_read2)
         if key in assignments:
             continue
-        nearby = [p for p in allele if read.reference_start <= p - 1 + args.window
-                   and read.reference_end >= p - args.window]
-        a = sum(local[p]["A"] for p in nearby)
-        b = sum(local[p]["B"] for p in nearby)
+        chrom = read.reference_name
+        nearby = [p for p in allele.get(chrom, {})
+                  if read.reference_start <= p - 1 + args.window
+                  and read.reference_end >= p - args.window]
+        a = sum(local[(chrom, p)]["A"] for p in nearby)
+        b = sum(local[(chrom, p)]["B"] for p in nearby)
         probability_a = a / (a + b) if a + b else 0.5
         assignments[key] = "A" if rng.random() < probability_a else "B"
 
@@ -78,7 +91,7 @@ def main():
     bam.reset()
     a_bam = pysam.AlignmentFile(out_a, "wb", template=bam)
     b_bam = pysam.AlignmentFile(out_b, "wb", template=bam)
-    for read in bam.fetch(args.chrom):
+    for read in bam.fetch(until_eof=True):
         key = (read.query_name, read.is_read1, read.is_read2)
         if assignments.get(key) == "A":
             a_bam.write(read)
