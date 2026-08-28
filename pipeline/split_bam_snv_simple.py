@@ -57,7 +57,8 @@ def main():
             evidence[key].append((chrom, pos, target))
             if key not in assignments:
                 assignments[key] = target
-            elif assignments[key] != target:
+            elif any(old_pos == pos and old_target != target
+                     for old_chrom, old_pos, old_target in evidence[key][:-1]):
                 assignments[key] = "AMBIGUOUS"
 
     # Estimate local proportions from informative reads.
