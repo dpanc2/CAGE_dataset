@@ -88,6 +88,19 @@ def main():
     prefix.parent.mkdir(parents=True, exist_ok=True)
     out_a = str(prefix) + ".A.bam"
     out_b = str(prefix) + ".B.bam"
+    assignment_path = str(prefix) + ".snv_assignments.tsv"
+    ambiguous_path = str(prefix) + ".ambiguous_reads.tsv"
+    with open(assignment_path, "w") as handle:
+        handle.write("chrom\tpos\tbiological_ref\tbiological_alt\tsynthetic_A\tsynthetic_B\n")
+        for chrom, positions in allele.items():
+            for pos, (a, b) in positions.items():
+                biological_ref, biological_alt = snvs[chrom][pos]
+                handle.write(f"{chrom}\t{pos}\t{biological_ref}\t{biological_alt}\t{a}\t{b}\n")
+    with open(ambiguous_path, "w") as handle:
+        handle.write("read_name\tread1\tread2\tevidence\n")
+        for key, obs in evidence.items():
+            if assignments.get(key) == "AMBIGUOUS":
+                handle.write(f"{key[0]}\t{key[1]}\t{key[2]}\t{obs}\n")
     bam.reset()
     a_bam = pysam.AlignmentFile(out_a, "wb", template=bam)
     b_bam = pysam.AlignmentFile(out_b, "wb", template=bam)
@@ -100,6 +113,7 @@ def main():
     a_bam.close(); b_bam.close(); bam.close()
     pysam.index(out_a); pysam.index(out_b)
     print(f"Wrote {out_a} and {out_b}")
+    print(f"Wrote {assignment_path} and {ambiguous_path}")
 
 
 if __name__ == "__main__":
